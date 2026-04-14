@@ -183,40 +183,29 @@ class PFRRTController:
         
         ######### Your code starts here #########
         particlesLocalized = False
-        step = 0
-    
-        while not particlesLocalized and not rospy.is_shutdown():
-            # obstacle in front using LIDAR
+        turn_direction = 1
 
-            
+        while not particlesLocalized and not rospy.is_shutdown():
+
             n = len(self.laserscan.ranges)
             cone = 15
-            # Index 0 = straight ahead on TurtleBot3
-            # Wrap around: first few indices + last few indices = front cone
             front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
-
-            
+            front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
             min_front_dist = min(front_ranges) if front_ranges else float('inf')
-    
-            obstacle = min_front_dist < 0.5  # wall within 0.5 meters
-    
-            # move or switch direction
-            if obstacle:
-                self.move_forward(-0.1)
-                self.rotate_in_place(pi / 2)
+
+            if min_front_dist < 0.5:
+                turn_direction *= -1
+                self.rotate_in_place(turn_direction * pi / 2)
             else:
-                self.move_forward(0.1)
-    
-            # update particle filter from LIDAR
+                self.move_forward(0.3)
+
             self.take_measurements()
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
-    
-            # update if particles have converged on robot's location
             particlesLocalized = self._pf.convergence()
-    
+
         x, y, th = self._pf.get_estimate()
-        rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f}) after {step} steps")
+        rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
 
         ######### Your code ends here #########
 
