@@ -182,6 +182,23 @@ class PFRRTController:
         """
         
         ######### Your code starts here #########
+        particlesLocalized = False
+        testCount = 0                       # DELETE BEFORE FINAL
+        
+        while(!particlesLocalized):
+            if (obstacle):
+                move_forward(-2)
+                rotate_in_place(Math.pi)
+            else:
+                move_forward(2)
+
+            if (call function from l89 - convergence()):
+                particlesLocalized = True
+                
+            if (testCount > 5):             # DELETE BEFORE FINAL
+                particlesLocalized = True   # DELETE BEFORE FINAL
+            testCount += 1                  # DELETE BEFORE FINAL
+                
 
         ######### Your code ends here #########
 
