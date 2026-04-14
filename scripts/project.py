@@ -187,10 +187,15 @@ class PFRRTController:
     
         while not particlesLocalized and not rospy.is_shutdown():
             # obstacle in front using LIDAR
+
+            
             n = len(self.laserscan.ranges)
-            mid = n // 2
             cone = 15
-            front_ranges = list(self.laserscan.ranges[mid - cone : mid + cone])
+            # Index 0 = straight ahead on TurtleBot3
+            # Wrap around: first few indices + last few indices = front cone
+            front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
+
+            
             min_front_dist = min(front_ranges) if front_ranges else float('inf')
     
             obstacle = min_front_dist < 0.5  # wall within 0.5 meters
