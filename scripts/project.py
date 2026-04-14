@@ -186,36 +186,29 @@ class PFRRTController:
         step = 0
     
         while not particlesLocalized and not rospy.is_shutdown():
-    
-            # --- Check for obstacle in front using LIDAR ---
+            # obstacle in front using LIDAR
             n = len(self.laserscan.ranges)
             mid = n // 2
             cone = 15
             front_ranges = list(self.laserscan.ranges[mid - cone : mid + cone])
             min_front_dist = min(front_ranges) if front_ranges else float('inf')
     
-            obstacle = min_front_dist < 0.5  # True if wall is within 0.5 meters
+            obstacle = min_front_dist < 0.5  # wall within 0.5 meters
     
-            # --- Move or turn ---
+            # move or switch direction
             if obstacle:
-                self.move_forward(-0.2)          # back up a little (0.2 meters)
-                self.rotate_in_place(pi / 2)     # turn 90 degrees
+                self.move_forward(-0.2)
+                self.rotate_in_place(pi / 2)
             else:
-                self.move_forward(0.3)           # go forward 0.3 meters
+                self.move_forward(0.3)
     
-            # --- Update particle filter with LIDAR readings ---
-            # (move_by is already called in odom_callback, so we only measure here)
+            # update particle filter from LIDAR
             self.take_measurements()
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
     
-            # --- Check if particles have converged ---
+            # update if particles have converged on robot's location
             particlesLocalized = self._pf.convergence()
-    
-            # --- Safety: stop if we've been exploring too long ---
-            if step >= max_steps:
-                rospy.logwarn(f"Did not converge after {max_steps} steps — proceeding anyway")
-                break
     
         x, y, th = self._pf.get_estimate()
         rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f}) after {step} steps")
