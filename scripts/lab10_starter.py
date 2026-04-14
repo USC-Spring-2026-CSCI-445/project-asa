@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from typing import Optional, Tuple, List, Dict
 from argparse import ArgumentParser
-from math import inf, sqrt, atan2, pi
+from math import inf, sqrt, atan2, pi, sin, cos
 from time import sleep, time
 import queue
 import json
@@ -59,6 +59,12 @@ class PIDController:
         if len(self.err_hist) > self.kS:
             self.err_int -= self.err_hist.pop(0)
         self.err_dif = err - self.err_prev
+
+        if dt < 1e-6:
+            self.err_prev = err
+            self.t_prev = t
+            return max(self.u_min, min(self.kP * err, self.u_max))
+
         u = (self.kP * err) + (self.kI * self.err_int * dt) + (self.kD * self.err_dif / dt)
         self.err_prev = err
         self.t_prev = t
@@ -93,6 +99,7 @@ class RrtPlanner:
         self.delta = 0.1
         self.obstacle_padding = 0.15
         self.goal_threshold = GOAL_THRESHOLD
+        self.max_iterations = 5000
 
     def visualize_plan(self, path: List[Dict]):
         marker_array = MarkerArray()
@@ -131,13 +138,23 @@ class RrtPlanner:
     def _randomly_sample_q(self) -> Node:
         # Choose uniform randomly sampled points
         ######### Your code starts here #########
-
+        x_min, x_max, y_min, y_max = self.map_aabb
+        x = np.random.uniform(x_min, x_max)
+        y = np.random.uniform(y_min, y_max)
+        return Node(np.array([x, y]), parent=None)
         ######### Your code ends here #########
 
     def _nearest_vertex(self, graph: List[Node], q: Node) -> Node:
         # Determine vertex nearest to sampled point
         ######### Your code starts here #########
-
+        nearest = None
+        min_dist = float("inf")
+        for node in graph:
+            dist = node.distance_to(q)
+            if dist < min_dist:
+                min_dist = dist
+                nearest = node
+        return nearest
         ######### Your code ends here #########
 
     def _is_in_collision(self, q_rand: Node):
@@ -157,7 +174,27 @@ class RrtPlanner:
 
         # Check if sampled point is in collision and add to tree if not
         ######### Your code starts here #########
-
+        q_near = self._nearest_vertex(graph, q_rand)
+ 
+        diff = q_rand.position - q_near.position
+        dist = np.linalg.norm(diff)
+ 
+        if dist < 1e-6:
+            return None
+ 
+        direction = diff / dist
+ 
+        step = min(self.delta, dist)
+        new_position = q_near.position + step * direction
+ 
+        q_new = Node(new_position, parent=q_near)
+ 
+        if self._is_in_collision(q_new):
+            return None
+ 
+        q_near.neighbors.append(q_new)
+        graph.append(q_new)
+        return q_new
         ######### Your code ends here #########
 
     def generate_plan(self, start: POSITION_TYPE, goal: POSITION_TYPE) -> Tuple[List[POSITION_TYPE], List[Node]]:
@@ -184,7 +221,34 @@ class RrtPlanner:
 
         # Find path from start to goal location through tree
         ######### Your code starts here #########
-
+        goal_reached_node = None
+ 
+        for i in range(self.max_iterations):
+            q_rand = self._randomly_sample_q()
+            q_new = self._extend(graph, q_rand)
+ 
+            if q_new is None:
+                continue
+ 
+            if q_new.distance_to(goal_node) <= self.goal_threshold:
+                goal_reached_node = q_new
+                break
+ 
+        if goal_reached_node is not None:
+            path_nodes = []
+            current = goal_reached_node
+            while current is not None:
+                path_nodes.append(current)
+                current = current.parent
+            path_nodes.reverse()
+ 
+            for node in path_nodes:
+                plan.append(node.to_dict())
+ 
+            plan[-1] = {"x": goal["x"], "y": goal["y"]}
+            rospy.logwarn(f"RRT found the goal in {i} iterations.")
+        else:
+            rospy.logwarn(f"RRT did not reach the goal within {self.max_iterations} iterations.")
 
         ######### Your code ends here #########
         return plan, graph
@@ -192,7 +256,112 @@ class RrtPlanner:
 
 # Protip: copy the ObstacleFreeWaypointController class from lab5.py here
 ######### Your code starts here #########
+def publish_waypoints(waypoints: List[Dict], publisher: rospy.Publisher):
+    marker_array = MarkerArray()
+    for i, waypoint in enumerate(waypoints):
+        marker = Marker()
+        marker.header.frame_id = "odom"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "waypoints"
+        marker.id = i
+        marker.type = Marker.CYLINDER
+        marker.action = Marker.ADD
+        marker.pose.position = Point(waypoint["x"], waypoint["y"], 0.0)
+        marker.pose.orientation = Quaternion(0, 0, 0, 1)
+        marker.scale = Vector3(0.1, 0.1, 0.1)
+        marker.color = ColorRGBA(0.0, 1.0, 0.0, 0.5)
+        marker_array.markers.append(marker)
+    publisher.publish(marker_array)
 
+class ObstacleFreeWaypointController:
+    def __init__(self, waypoints: List[Dict]):
+        self.waypoints = waypoints
+        # Subscriber to the robot's current position (assuming you have Odometry data)
+        self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
+        self.robot_ctrl_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+        self.waypoint_pub = rospy.Publisher("/waypoints", MarkerArray, queue_size=10)
+        sleep(0.5)  # sleep to give time for rviz to subscribe to /waypoints
+        publish_waypoints(self.waypoints, self.waypoint_pub)
+
+        self.current_position = None
+
+        # define linear and angular PID controllers here
+        ######### Your code starts here #########
+        self.linear_pid = PIDController(kP=1.2, kI=0.00, kD=1.5, kS=0.5, u_min=0.0, u_max=0.22)
+        self.angular_pid = PIDController(kP=1.2, kI=0.2, kD=1.0, kS=0.5, u_min=-2.0, u_max=2.0)
+        ######### Your code ends here #########
+
+    def odom_callback(self, msg):
+        # Extracting current position from Odometry message
+        pose = msg.pose.pose
+        orientation = pose.orientation
+        _, _, theta = euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])
+        self.current_position = {"x": pose.position.x, "y": pose.position.y, "theta": theta}
+
+    def calculate_error(self, goal_position: Dict) -> Optional[Tuple]:
+        """Return distance and angle error between the current position and the provided goal_position. Returns None if
+        the current position is not available.
+        """
+        if self.current_position is None:
+            return None
+
+        # Calculate error in position and orientation
+        ######### Your code starts here #########
+        dx = goal_position["x"] - self.current_position["x"]
+        dy = goal_position["y"] - self.current_position["y"]
+        distance_error = sqrt(dx**2 + dy**2)
+        target_theta = atan2(dy, dx)
+        angle_error = target_theta - self.current_position["theta"]
+        angle_error = atan2(sin(angle_error), cos(angle_error))
+        ######### Your code ends here #########
+
+        return distance_error, angle_error
+
+    def control_robot(self):
+        rate = rospy.Rate(20)  # 20 Hz
+        ctrl_msg = Twist()
+
+        current_waypoint_idx = 0
+
+        while not rospy.is_shutdown():
+
+            # Travel through waypoints one at a time, checking if robot is close enough
+            ######### Your code starts here #########
+            if self.current_position is None:
+                rate.sleep()
+                continue
+
+            if current_waypoint_idx >= len(self.waypoints):
+                ctrl_msg.linear.x = 0.0
+                ctrl_msg.angular.z = 0.0
+                self.robot_ctrl_pub.publish(ctrl_msg)
+                rate.sleep()
+                continue
+
+            goal = self.waypoints[current_waypoint_idx]
+            error = self.calculate_error(goal)
+
+            if error is None:
+                rate.sleep()
+                continue
+
+            distance_error, angle_error = error
+            t = rospy.get_time()
+
+            linear_vel = self.linear_pid.control(distance_error, t)
+            angular_vel = self.angular_pid.control(angle_error, t)
+
+            if abs(angle_error) > 0.5:
+                linear_vel = 0.0
+
+            ctrl_msg.linear.x = linear_vel
+            ctrl_msg.angular.z = angular_vel
+            self.robot_ctrl_pub.publish(ctrl_msg)
+
+            if distance_error < 0.1:
+                current_waypoint_idx += 1
+            ######### Your code ends here #########
+            rate.sleep()
 ######### Your code ends here #########
 
 
