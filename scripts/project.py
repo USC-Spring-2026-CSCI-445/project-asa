@@ -192,8 +192,7 @@ class PFRRTController:
             else:
                 move_forward(2)
 
-            if (call function from l89 - convergence()):
-                particlesLocalized = True
+            particlesLocalized = ParticleFilter.convergence()
                 
             if (testCount > 5):             # DELETE BEFORE FINAL
                 particlesLocalized = True   # DELETE BEFORE FINAL
