@@ -197,10 +197,10 @@ class PFRRTController:
     
             # move or switch direction
             if obstacle:
-                self.move_forward(-0.2)
+                self.move_forward(-0.1)
                 self.rotate_in_place(pi / 2)
             else:
-                self.move_forward(0.3)
+                self.move_forward(0.1)
     
             # update particle filter from LIDAR
             self.take_measurements()
