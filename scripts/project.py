@@ -183,21 +183,42 @@ class PFRRTController:
         
         ######### Your code starts here #########
         particlesLocalized = False
-        testCount = 0                       # DELETE BEFORE FINAL
-        
-        while(!particlesLocalized):
-            if (obstacle):
-                move_forward(-2)
-                rotate_in_place(Math.pi)
+        step = 0
+    
+        while not particlesLocalized and not rospy.is_shutdown():
+    
+            # --- Check for obstacle in front using LIDAR ---
+            n = len(self.laserscan.ranges)
+            mid = n // 2
+            cone = 15
+            front_ranges = list(self.laserscan.ranges[mid - cone : mid + cone])
+            min_front_dist = min(front_ranges) if front_ranges else float('inf')
+    
+            obstacle = min_front_dist < 0.5  # True if wall is within 0.5 meters
+    
+            # --- Move or turn ---
+            if obstacle:
+                self.move_forward(-0.2)          # back up a little (0.2 meters)
+                self.rotate_in_place(pi / 2)     # turn 90 degrees
             else:
-                move_forward(2)
-
-            particlesLocalized = ParticleFilter.convergence()
-                
-            if (testCount > 5):             # DELETE BEFORE FINAL
-                particlesLocalized = True   # DELETE BEFORE FINAL
-            testCount += 1                  # DELETE BEFORE FINAL
-                
+                self.move_forward(0.3)           # go forward 0.3 meters
+    
+            # --- Update particle filter with LIDAR readings ---
+            # (move_by is already called in odom_callback, so we only measure here)
+            self.take_measurements()
+            self._pf.visualize_particles()
+            self._pf.visualize_estimate()
+    
+            # --- Check if particles have converged ---
+            particlesLocalized = self._pf.convergence()
+    
+            # --- Safety: stop if we've been exploring too long ---
+            if step >= max_steps:
+                rospy.logwarn(f"Did not converge after {max_steps} steps — proceeding anyway")
+                break
+    
+        x, y, th = self._pf.get_estimate()
+        rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f}) after {step} steps")
 
         ######### Your code ends here #########
 
