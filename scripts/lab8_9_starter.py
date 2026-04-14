@@ -255,7 +255,22 @@ class ParticleFilter:
             for _ in range(n_particles)
         ]
         ######### Your code ends here #########
+    
+    
+    #new function for checking particle 
+    def convergence(self, std_threshold=0.12):
+        """Check if particles have converged to a small area.
+        
+        Returns True if the spread (standard deviation) of all 
+        particles in both x and y is below the threshold.
+        """
+        xs = [p.x for p in self._particles]
+        ys = [p.y for p in self._particles]
+        std_x = np.std(xs)
+        std_y = np.std(ys)
+        return std_x < std_threshold and std_y < std_threshold
 
+        
     def visualize_particles(self):
         pa = PoseArray()
         pa.header.frame_id = "odom"
