@@ -184,9 +184,9 @@ class PFRRTController:
         ######### Your code starts here #########
         particlesLocalized = False
         turn_direction = 1
+        extra_steps = 0
 
-        while not particlesLocalized and not rospy.is_shutdown():
-
+        while not rospy.is_shutdown():
             n = len(self.laserscan.ranges)
             cone = 15
             front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
@@ -202,7 +202,13 @@ class PFRRTController:
             self.take_measurements()
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
-            particlesLocalized = self._pf.convergence()
+
+            if not particlesLocalized:
+                particlesLocalized = self._pf.convergence()
+            else:
+                extra_steps += 1
+                if extra_steps >= 5:
+                    break
 
         x, y, th = self._pf.get_estimate()
         rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
