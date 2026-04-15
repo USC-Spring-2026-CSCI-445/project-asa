@@ -207,7 +207,7 @@ class PFRRTController:
                 particlesLocalized = self._pf.convergence()
             else:
                 extra_steps += 1
-                if extra_steps >= 5:
+                if extra_steps >= 15:
                     break
 
         x, y, th = self._pf.get_estimate()
