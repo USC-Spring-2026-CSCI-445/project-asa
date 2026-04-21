@@ -14,6 +14,7 @@ from tf.transformations import euler_from_quaternion
 
 # Import your existing implementations
 from lab8_9_starter import Map, ParticleFilter, angle_to_neg_pi_to_pi  # :contentReference[oaicite:2]{index=2}
+from lab8_9_starter import Controller # AMISHA ADDED
 from lab10_starter import RrtPlanner, PIDController as WaypointPID, GOAL_THRESHOLD  # :contentReference[oaicite:3]{index=3}
 
 
@@ -52,6 +53,11 @@ class PFRRTController:
         self.current_wp_idx: int = 0
 
         self.rate = rospy.Rate(10)
+
+        # AMISHA ADDED
+        self._particle_filter = self._pf            # AMISHA ADDED
+        self.forward_action = self.move_forward     # AMISHA ADDED
+        self.rotate_action = self.rotate_in_place   # AMISHA ADDED
 
         # Wait until we have initial odom + scan
         while (self.current_position is None or self.laserscan is None) and (not rospy.is_shutdown()):
@@ -182,40 +188,42 @@ class PFRRTController:
         """
         
         ######### Your code starts here #########
-        particlesLocalized = False
-        turn_direction = 1
-        extra_steps = 0
+        Controller.autonomous_exploration(self)
+        
+        # particlesLocalized = False
+        # turn_direction = 1
+        # extra_steps = 0
 
-        while not rospy.is_shutdown():
-            n = len(self.laserscan.ranges)
-            cone = 15
-            front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
-            front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
-            min_front_dist = min(front_ranges) if front_ranges else float('inf')
+        # while not rospy.is_shutdown():
+        #     n = len(self.laserscan.ranges)
+        #     cone = 15
+        #     front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
+        #     front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
+        #     min_front_dist = min(front_ranges) if front_ranges else float('inf')
 
-            if min_front_dist < 0.5:
-                turn_direction *= -1
-                self.rotate_in_place(turn_direction * pi / 2)
-            else:
-                self.move_forward(0.3)
+        #     if min_front_dist < 0.5:
+        #         turn_direction *= -1
+        #         self.rotate_in_place(turn_direction * pi / 2)
+        #     else:
+        #         self.move_forward(0.3)
 
-            self.take_measurements()
-            self._pf.visualize_particles()
-            self._pf.visualize_estimate()
+        #     self.take_measurements()
+        #     self._pf.visualize_particles()
+        #     self._pf.visualize_estimate()
 
-            # if not particlesLocalized:
-            #     particlesLocalized = self._pf.convergence()
-            # else:
-            #     extra_steps += 1
-            #     if extra_steps >= 15:
-            #         break
+        #     if not particlesLocalized:
+        #         particlesLocalized = ????
+        #     else:
+        #         extra_steps += 1
+        #         if extra_steps >= 15:
+        #             break
 
-            extra_steps += 1
-            if extra_steps >= 8:
-                break
+        #     # extra_steps += 1
+        #     # if extra_steps >= 8:
+        #     #     break
 
-        x, y, th = self._pf.get_estimate()
-        rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
+        # x, y, th = self._pf.get_estimate()
+        # rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
 
         ######### Your code ends here #########
 
