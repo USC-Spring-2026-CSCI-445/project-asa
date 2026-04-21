@@ -203,12 +203,16 @@ class PFRRTController:
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
 
-            if not particlesLocalized:
-                particlesLocalized = self._pf.convergence()
-            else:
-                extra_steps += 1
-                if extra_steps >= 15:
-                    break
+            # if not particlesLocalized:
+            #     particlesLocalized = self._pf.convergence()
+            # else:
+            #     extra_steps += 1
+            #     if extra_steps >= 15:
+            #         break
+
+            extra_steps += 1
+            if extra_steps >= 8:
+                break
 
         x, y, th = self._pf.get_estimate()
         rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
