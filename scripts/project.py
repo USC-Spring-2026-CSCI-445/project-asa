@@ -55,9 +55,9 @@ class PFRRTController:
         self.rate = rospy.Rate(10)
 
         # AMISHA ADDED
-        self._particle_filter = self._pf            # AMISHA ADDED
-        self.forward_action = self.move_forward     # AMISHA ADDED
-        self.rotate_action = self.rotate_in_place   # AMISHA ADDED
+        # self._particle_filter = self._pf            # AMISHA ADDED
+        # self.forward_action = self.move_forward     # AMISHA ADDED
+        # self.rotate_action = self.rotate_in_place   # AMISHA ADDED
 
         # Wait until we have initial odom + scan
         while (self.current_position is None or self.laserscan is None) and (not rospy.is_shutdown()):
