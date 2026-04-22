@@ -293,6 +293,67 @@ class PFRRTController:
         Keep updating PF along the way.
         """
         ######### Your code starts here #########
+        if not self.plan or len(self.plan) == 0:
+            rospy.logerr("No plan to follow! Did plan_with_rrt() succeed?")
+            return
+    
+        rospy.loginfo(f"Following plan with {len(self.plan)} waypoints.")
+        rate = rospy.Rate(20)  # 20 Hz, matching lab10 controller
+        ctrl_msg = Twist()
+        self.current_wp_idx = 0
+    
+        while not rospy.is_shutdown():
+    
+            # Wait for odom to come in
+            if self.current_position is None:
+                rate.sleep()
+                continue
+    
+            # All waypoints reached — stop the robot
+            if self.current_wp_idx >= len(self.plan):
+                ctrl_msg.linear.x = 0.0
+                ctrl_msg.angular.z = 0.0
+                self.cmd_pub.publish(ctrl_msg)
+                rospy.loginfo("Goal reached! Robot stopped.")
+                break
+    
+            # Get current waypoint target
+            goal = self.plan[self.current_wp_idx]
+    
+            # Calculate distance and angle error to current waypoint
+            dx = goal["x"] - self.current_position["x"]
+            dy = goal["y"] - self.current_position["y"]
+            distance_error = sqrt(dx**2 + dy**2)
+            target_theta = atan2(dy, dx)
+            angle_error = target_theta - self.current_position["theta"]
+            # Normalize angle error to [-pi, pi]
+            angle_error = atan2(math.sin(angle_error), math.cos(angle_error))
+    
+            # Compute PID control signals
+            t = rospy.get_time()
+            linear_vel = self.linear_pid.control(distance_error, t)
+            angular_vel = self.angular_pid.control(angle_error, t)
+    
+            # If robot is significantly misaligned, stop moving forward and rotate first
+            if abs(angle_error) > 0.5:
+                linear_vel = 0.0
+    
+            ctrl_msg.linear.x = linear_vel
+            ctrl_msg.angular.z = angular_vel
+            self.cmd_pub.publish(ctrl_msg)
+    
+            # Advance to next waypoint once close enough
+            if distance_error < GOAL_THRESHOLD:
+                rospy.loginfo(f"Reached waypoint {self.current_wp_idx + 1}/{len(self.plan)}: "
+                              f"({goal['x']:.2f}, {goal['y']:.2f})")
+                self.current_wp_idx += 1
+    
+            # Keep PF updated while moving
+            self.take_measurements()
+            self._pf.visualize_particles()
+            self._pf.visualize_estimate()
+    
+            rate.sleep()
 
         ######### Your code ends here #########
 
