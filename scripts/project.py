@@ -188,56 +188,8 @@ class PFRRTController:
         """
         
         ######### Your code starts here #########
-        Controller.autonomous_exploration(self)
+        Controller.autonomous_exploration(self)   # is this it?
         
-        # particlesLocalized = False
-        # turn_direction = 1
-        # extra_steps = 0
-        # step = 0
-    
-        # while not rospy.is_shutdown() and step < max_steps:
-        #     # --- Check front cone of LiDAR for nearby obstacles ---
-        #     cone = 15
-        #     front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
-        #     front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
-        #     min_front_dist = min(front_ranges) if front_ranges else float('inf')
-    
-        #     # --- Motion policy ---
-        #     if min_front_dist < 0.5:
-        #         # Obstacle close ahead: turn away (alternate direction to avoid getting stuck)
-        #         turn_direction *= -1
-        #         self.rotate_in_place(turn_direction * pi / 2)
-        #     else:
-        #         # Path is clear: move forward
-        #         self.move_forward(0.3)
-    
-        #     # --- PF update + visualization ---
-        #     self.take_measurements()
-        #     self._pf.visualize_particles()
-        #     self._pf.visualize_estimate()
-    
-        #     # --- Convergence check: measure how tight the particle cloud is ---
-        #     xs = np.array([p.x for p in self._pf._particles])
-        #     ys = np.array([p.y for p in self._pf._particles])
-        #     spread = math.sqrt(np.var(xs) + np.var(ys))  # "radius" of cloud in meters
-        #     rospy.loginfo(f"[Step {step}] Particle spread: {spread:.3f}")
-    
-        #     if not particlesLocalized:
-        #         # Latch to True once cloud has collapsed below threshold
-        #         if spread < 0.25:
-        #             particlesLocalized = True
-        #             rospy.loginfo("Particles converged. Verifying for 15 more steps...")
-        #     else:
-        #         # Already converged — run a few more steps to confirm stability, then exit
-        #         extra_steps += 1
-        #         if extra_steps >= 15:
-        #             break
-    
-        #     step += 1
-    
-        # x, y, th = self._pf.get_estimate()
-        # rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
-
         ######### Your code ends here #########
 
         
@@ -250,35 +202,36 @@ class PFRRTController:
         Generate a path using RRT from PF-estimated start to known goal.
         """
         ######### Your code starts here #########
-        # Step 1: Get the robot's estimated position from the particle filter
+        # get robot's est pos from pf
         x_est, y_est, theta_est = self._pf.get_estimate()
         
-        rospy.loginfo(f"PF estimate for RRT start: ({x_est:.3f}, {y_est:.3f}, {theta_est:.3f})")
+        # rospy.loginfo(f"PF estimate for RRT start: ({x_est:.3f}, {y_est:.3f}, {theta_est:.3f})") # DEBUG
         
         start_position = {"x": x_est, "y": y_est, "theta": theta_est}
         
-        # Step 2: Run RRT from estimated start to known goal
+        # run RRT from curr location to goal
         plan, graph = self._planner.generate_plan(start_position, self.goal_position)
         
-        # Step 3: Visualize the plan and graph in RViz
+        # draw it in RViz
         self._planner.visualize_plan(plan)
         self._planner.visualize_graph(graph)
-        
+
+        # error prevention
         if len(plan) == 0:
-            rospy.logwarn("RRT failed to find a path! Retrying once...")
-            # Retry once — PF estimate may have been noisy
+            # rospy.logwarn("RRT failed to find a path. Retrying.") # DEBUG
             x_est, y_est, theta_est = self._pf.get_estimate()
             start_position = {"x": x_est, "y": y_est, "theta": theta_est}
             plan, graph = self._planner.generate_plan(start_position, self.goal_position)
             self._planner.visualize_plan(plan)
             self._planner.visualize_graph(graph)
-        
+
+        # more error prevention - will this mess up?
         if len(plan) == 0:
             rospy.logerr("RRT could not find a path after retry. Follow phase will be skipped.")
         else:
             rospy.loginfo(f"RRT found a plan with {len(plan)} waypoints.")
         
-        # Step 4: Store the plan for follow_plan() to consume
+        # store the plan for the next phase
         self.plan = plan
         self.current_wp_idx = 0
 
@@ -303,13 +256,11 @@ class PFRRTController:
         self.current_wp_idx = 0
     
         while not rospy.is_shutdown():
-    
-            # Wait for odom to come in
             if self.current_position is None:
                 rate.sleep()
                 continue
     
-            # All waypoints reached — stop the robot
+            # all waypoints hit —> stop the robot
             if self.current_wp_idx >= len(self.plan):
                 ctrl_msg.linear.x = 0.0
                 ctrl_msg.angular.z = 0.0
@@ -317,24 +268,23 @@ class PFRRTController:
                 rospy.loginfo("Goal reached! Robot stopped.")
                 break
     
-            # Get current waypoint target
+            # get curr waypoint target
             goal = self.plan[self.current_wp_idx]
     
-            # Calculate distance and angle error to current waypoint
+            # get distance & angle error to curr waypoint
             dx = goal["x"] - self.current_position["x"]
             dy = goal["y"] - self.current_position["y"]
             distance_error = sqrt(dx**2 + dy**2)
             target_theta = atan2(dy, dx)
             angle_error = target_theta - self.current_position["theta"]
-            # Normalize angle error to [-pi, pi]
-            angle_error = atan2(math.sin(angle_error), math.cos(angle_error))
-    
-            # Compute PID control signals
+            angle_error = atan2(math.sin(angle_error), math.cos(angle_error)) # normalize
+
+            # PID control signals
             t = rospy.get_time()
             linear_vel = self.linear_pid.control(distance_error, t)
             angular_vel = self.angular_pid.control(angle_error, t)
     
-            # If robot is significantly misaligned, stop moving forward and rotate first
+            # if big error, stop moving and rotate first
             if abs(angle_error) > 0.5:
                 linear_vel = 0.0
     
@@ -342,13 +292,13 @@ class PFRRTController:
             ctrl_msg.angular.z = angular_vel
             self.cmd_pub.publish(ctrl_msg)
     
-            # Advance to next waypoint once close enough
+            # go to next waypoint once robot is close enough
             if distance_error < GOAL_THRESHOLD:
                 rospy.loginfo(f"Reached waypoint {self.current_wp_idx + 1}/{len(self.plan)}: "
                               f"({goal['x']:.2f}, {goal['y']:.2f})")
                 self.current_wp_idx += 1
     
-            # Keep PF updated while moving
+            # keep pf updated while moving
             self.take_measurements()
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
