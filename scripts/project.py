@@ -250,6 +250,37 @@ class PFRRTController:
         Generate a path using RRT from PF-estimated start to known goal.
         """
         ######### Your code starts here #########
+        # Step 1: Get the robot's estimated position from the particle filter
+        x_est, y_est, theta_est = self._pf.get_estimate()
+        
+        rospy.loginfo(f"PF estimate for RRT start: ({x_est:.3f}, {y_est:.3f}, {theta_est:.3f})")
+        
+        start_position = {"x": x_est, "y": y_est, "theta": theta_est}
+        
+        # Step 2: Run RRT from estimated start to known goal
+        plan, graph = self._planner.generate_plan(start_position, self.goal_position)
+        
+        # Step 3: Visualize the plan and graph in RViz
+        self._planner.visualize_plan(plan)
+        self._planner.visualize_graph(graph)
+        
+        if len(plan) == 0:
+            rospy.logwarn("RRT failed to find a path! Retrying once...")
+            # Retry once — PF estimate may have been noisy
+            x_est, y_est, theta_est = self._pf.get_estimate()
+            start_position = {"x": x_est, "y": y_est, "theta": theta_est}
+            plan, graph = self._planner.generate_plan(start_position, self.goal_position)
+            self._planner.visualize_plan(plan)
+            self._planner.visualize_graph(graph)
+        
+        if len(plan) == 0:
+            rospy.logerr("RRT could not find a path after retry. Follow phase will be skipped.")
+        else:
+            rospy.loginfo(f"RRT found a plan with {len(plan)} waypoints.")
+        
+        # Step 4: Store the plan for follow_plan() to consume
+        self.plan = plan
+        self.current_wp_idx = 0
 
         ######### Your code ends here #########
 
