@@ -55,9 +55,9 @@ class PFRRTController:
         self.rate = rospy.Rate(10)
 
         # AMISHA ADDED
-        # self._particle_filter = self._pf            # AMISHA ADDED
-        # self.forward_action = self.move_forward     # AMISHA ADDED
-        # self.rotate_action = self.rotate_in_place   # AMISHA ADDED
+        self._particle_filter = self._pf            # AMISHA ADDED
+        self.forward_action = self.move_forward     # AMISHA ADDED
+        self.rotate_action = self.rotate_in_place   # AMISHA ADDED
 
         # Wait until we have initial odom + scan
         while (self.current_position is None or self.laserscan is None) and (not rospy.is_shutdown()):
@@ -188,55 +188,55 @@ class PFRRTController:
         """
         
         ######### Your code starts here #########
-        #Controller.autonomous_exploration(self)
+        Controller.autonomous_exploration(self)
         
-        particlesLocalized = False
-        turn_direction = 1
-        extra_steps = 0
-        step = 0
+        # particlesLocalized = False
+        # turn_direction = 1
+        # extra_steps = 0
+        # step = 0
     
-        while not rospy.is_shutdown() and step < max_steps:
-            # --- Check front cone of LiDAR for nearby obstacles ---
-            cone = 15
-            front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
-            front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
-            min_front_dist = min(front_ranges) if front_ranges else float('inf')
+        # while not rospy.is_shutdown() and step < max_steps:
+        #     # --- Check front cone of LiDAR for nearby obstacles ---
+        #     cone = 15
+        #     front_ranges = list(self.laserscan.ranges[:cone]) + list(self.laserscan.ranges[-cone:])
+        #     front_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
+        #     min_front_dist = min(front_ranges) if front_ranges else float('inf')
     
-            # --- Motion policy ---
-            if min_front_dist < 0.5:
-                # Obstacle close ahead: turn away (alternate direction to avoid getting stuck)
-                turn_direction *= -1
-                self.rotate_in_place(turn_direction * pi / 2)
-            else:
-                # Path is clear: move forward
-                self.move_forward(0.3)
+        #     # --- Motion policy ---
+        #     if min_front_dist < 0.5:
+        #         # Obstacle close ahead: turn away (alternate direction to avoid getting stuck)
+        #         turn_direction *= -1
+        #         self.rotate_in_place(turn_direction * pi / 2)
+        #     else:
+        #         # Path is clear: move forward
+        #         self.move_forward(0.3)
     
-            # --- PF update + visualization ---
-            self.take_measurements()
-            self._pf.visualize_particles()
-            self._pf.visualize_estimate()
+        #     # --- PF update + visualization ---
+        #     self.take_measurements()
+        #     self._pf.visualize_particles()
+        #     self._pf.visualize_estimate()
     
-            # --- Convergence check: measure how tight the particle cloud is ---
-            xs = np.array([p.x for p in self._pf._particles])
-            ys = np.array([p.y for p in self._pf._particles])
-            spread = math.sqrt(np.var(xs) + np.var(ys))  # "radius" of cloud in meters
-            rospy.loginfo(f"[Step {step}] Particle spread: {spread:.3f}")
+        #     # --- Convergence check: measure how tight the particle cloud is ---
+        #     xs = np.array([p.x for p in self._pf._particles])
+        #     ys = np.array([p.y for p in self._pf._particles])
+        #     spread = math.sqrt(np.var(xs) + np.var(ys))  # "radius" of cloud in meters
+        #     rospy.loginfo(f"[Step {step}] Particle spread: {spread:.3f}")
     
-            if not particlesLocalized:
-                # Latch to True once cloud has collapsed below threshold
-                if spread < 0.25:
-                    particlesLocalized = True
-                    rospy.loginfo("Particles converged. Verifying for 15 more steps...")
-            else:
-                # Already converged — run a few more steps to confirm stability, then exit
-                extra_steps += 1
-                if extra_steps >= 15:
-                    break
+        #     if not particlesLocalized:
+        #         # Latch to True once cloud has collapsed below threshold
+        #         if spread < 0.25:
+        #             particlesLocalized = True
+        #             rospy.loginfo("Particles converged. Verifying for 15 more steps...")
+        #     else:
+        #         # Already converged — run a few more steps to confirm stability, then exit
+        #         extra_steps += 1
+        #         if extra_steps >= 15:
+        #             break
     
-            step += 1
+        #     step += 1
     
-        x, y, th = self._pf.get_estimate()
-        rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
+        # x, y, th = self._pf.get_estimate()
+        # rospy.loginfo(f"Localized at ({x:.2f}, {y:.2f}, {th:.2f})")
 
         ######### Your code ends here #########
 
