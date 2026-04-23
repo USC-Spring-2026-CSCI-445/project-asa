@@ -525,6 +525,7 @@ class Controller:
         max_steps = 400
         rotation_attempts = 0
         move_distance = 0.25  # move farther per step
+        close_count = 0 #new edit misha
 
         for step in range(max_steps):
             if rospy.is_shutdown():
