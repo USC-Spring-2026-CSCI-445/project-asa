@@ -177,25 +177,20 @@ class PFRRTController:
             self._pf.measure(z, a)
 
     # ----------------------------------------------------------------------
-    # Phase 1: Localization with PF (explore a bit)
+    # Phase 1: Localization with PF
     # ----------------------------------------------------------------------
-    # ----------------------------------------------------------------------
-    # Real-robot safe laser helpers
-    # ----------------------------------------------------------------------
+
     def _valid_range(self, r):
-        """Real TurtleBot3 LDS returns 0.0 or NaN for bad beams; filter those."""
+        # filter for bad vals
         if r is None:
             return False
         if np.isinf(r) or np.isnan(r):
             return False
-        if r < 0.12:  # LDS-01 physical minimum is ~12 cm
+        if r < 0.12:  # 12 cm
             return False
         return True
     
     def _front_min_range(self, half_window_deg=25):
-        """Return the minimum VALID range in a ±half_window_deg cone ahead of the
-        robot. Auto-detects whether the scan is sim-style (angle_min ≈ -π, front at
-        middle of array) or real-style (angle_min ≈ 0, front at index 0)."""
         if self.laserscan is None:
             return float("inf")
         ranges = self.laserscan.ranges
@@ -204,12 +199,10 @@ class PFRRTController:
             return float("inf")
     
         if abs(self.laserscan.angle_min) < 0.1:
-            # Real robot: index 0 is front, wrap around both sides
             beams_per_deg = n / 360.0
             k = int(round(half_window_deg * beams_per_deg))
             idxs = list(range(0, k + 1)) + list(range(n - k, n))
         else:
-            # Sim: front is at the middle of the ranges array
             mid = n // 2
             beams_per_rad = 1.0 / self.laserscan.angle_increment
             k = int(round(math.radians(half_window_deg) * beams_per_rad))
@@ -217,10 +210,7 @@ class PFRRTController:
     
         valid = [ranges[i] for i in idxs if self._valid_range(ranges[i])]
         return min(valid) if valid else float("inf")
-    
-    # ----------------------------------------------------------------------
-    # Phase 1: Localization with PF (overrides Lab 8/9 exploration)
-    # ----------------------------------------------------------------------
+
     def localize_with_pf(self, max_steps: int = 400):
         """
         Exploration tuned for the real robot:
@@ -241,37 +231,37 @@ class PFRRTController:
                 break
     
             front_dist = self._front_min_range(half_window_deg=25)
-            rospy.loginfo(f"[localize {step}] front_dist={front_dist:.2f}")
+            # rospy.loginfo(f"[localize {step}] front_dist={front_dist:.2f}") # DEBUG
     
-            # Escape if we've been rotating too long
+            # escape if we've been rotating too long
             if rotation_streak > 5:
-                rospy.loginfo("Stuck rotating; forcing small forward move.")
+                # rospy.loginfo("Stuck rotating; forcing small forward move.") # DEBUG
                 self.move_forward(0.10)
                 rotation_streak = 0
     
             elif front_dist < 0.35:
-                # Obstacle ahead — turn, don't back up
+                # obstacle ahead
                 self.rotate_in_place(uniform(math.pi / 4, math.pi / 2))
                 rotation_streak += 1
     
             else:
-                # Clear — go forward
+                # free
                 self.move_forward(0.18)
                 rotation_streak = 0
     
-            # Update particle filter with the current scan
+            # update pf
             self.take_measurements()
             self._pf.visualize_particles()
             self._pf.visualize_estimate()
     
-            # Only check convergence after some real motion
+            # check converge
             if step >= min_steps_before_convergence:
                 particles = np.array([[p.x, p.y] for p in self._pf._particles])
                 x_est, y_est, _ = self._pf.get_estimate()
                 spread = float(np.std(
                     np.linalg.norm(particles - np.array([x_est, y_est]), axis=1)
                 ))
-                rospy.loginfo(f"[localize {step}] spread={spread:.3f}")
+                # rospy.loginfo(f"[localize {step}] spread={spread:.3f}") # DEBUG
                 if spread < 0.15:
                     rospy.loginfo("Particle filter converged.")
                     break
